@@ -1,6 +1,19 @@
 import streamlit as st
 import re
 from collections import defaultdict
+st.markdown("""
+    <style>
+        .block-container {
+            max-width: 90% !important;
+            padding-left: 5%;
+            padding-right: 5%;
+        }
+        .element-container textarea, .element-container pre {
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+        }
+    </style>
+""", unsafe_allow_html=True)
 
 st.title("ZMK Keymap 整形ツール（インデント付き・テキスト入力版）")
 
