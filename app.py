@@ -1,6 +1,8 @@
 import streamlit as st
 import re
 from collections import defaultdict
+
+# Wider layout styling
 st.markdown("""
     <style>
         .block-container {
@@ -8,19 +10,19 @@ st.markdown("""
             padding-left: 5%;
             padding-right: 5%;
         }
-        .element-container textarea, .element-container pre {
+        textarea, pre {
             font-family: 'Courier New', monospace;
             font-size: 14px;
         }
     </style>
 """, unsafe_allow_html=True)
 
-st.title("ZMK Keymap 整形ツール（インデント付き・テキスト入力版）")
+st.title("ZMK Keymap Formatter (Text Input + Aligned Output)")
 
-layout_input = st.text_area("① physical layout ブロックを貼り付けてください", height=300)
-keymap_input = st.text_area("② keymap layer ブロックを貼り付けてください", height=300)
+layout_input = st.text_area("① Paste the `physical layout` block here:", height=300)
+keymap_input = st.text_area("② Paste the `keymap layer` block here:", height=300)
 
-spacing_unit = st.slider("インデント幅調整（1スペースあたりのX距離）", min_value=10, max_value=200, value=50, step=10)
+spacing_unit = st.slider("Indent unit (X distance per space):", min_value=10, max_value=200, value=50, step=10)
 
 if layout_input and keymap_input:
     coords = re.findall(r"&key_physical_attrs\s+\d+\s+\d+\s+(-?\d+)\s+(-?\d+)", layout_input)
@@ -29,50 +31,58 @@ if layout_input and keymap_input:
     keycodes = re.findall(r"&(?:\S+\s+)*?\S+(?=\s*&|$)", keymap_input)
 
     if len(coords) != len(keycodes):
-        st.warning(f"⚠️ キー数が一致しません（coords: {len(coords)}, keycodes: {len(keycodes)}）")
+        st.warning(f"⚠️ Key count mismatch (coords: {len(coords)}, keycodes: {len(keycodes)})")
 
-    # 座標とキーコードの対応付け
+    # Match coordinates and keycodes
     keys_with_coords = []
     for i, (x, y) in enumerate(coords):
         code = keycodes[i] if i < len(keycodes) else ""
         keys_with_coords.append((x, y, code))
 
-    # 列ごとのインデックスを計算し、Y軸ごとに行を分ける
+    # Group by row using Y coordinate
     rows = defaultdict(list)
     for x, y, code in keys_with_coords:
         row_key = (y // 100) * 100
-        col_index = x // spacing_unit
-        rows[row_key].append((col_index, code))
+        rows[row_key].append((x, code))
 
-    # 列ごとの最大文字長を計算
-    column_widths = defaultdict(int)
-    for row in rows.values():
-        for col, code in row:
-            column_widths[col] = max(column_widths[col], len(code))
+    # Build all rows sorted by Y, then X
+    column_positions = defaultdict(dict)
+    max_cols = 0
 
-    # 出力整形
-    output_lines = []
+    # First pass: determine column indices and max width per column
+    col_widths = defaultdict(int)
+    row_lines = []
     for y in sorted(rows):
-        line = []
-        current_row = rows[y]
-        col_dict = {col: code for col, code in current_row}
-        max_col = max(column_widths.keys())
+        row = sorted(rows[y], key=lambda p: p[0])
+        row_line = []
+        for x, code in row:
+            col = x // spacing_unit
+            row_line.append((col, code))
+            col_widths[col] = max(col_widths[col], len(code))
+            max_cols = max(max_cols, col)
+        row_lines.append((y, row_line))
 
-        for col in range(max_col + 1):
-            code = col_dict.get(col, "")
+    # Second pass: build aligned lines
+    output_lines = []
+    for y, row in row_lines:
+        line_parts = []
+        col_map = dict(row)
+        for col in range(max_cols + 1):
+            code = col_map.get(col, "")
             if code:
-                padded = code.ljust(column_widths[col])
+                padded = code.ljust(col_widths[col])
             else:
-                padded = " " * column_widths[col]
-            line.append(padded)
-        output_lines.append("    " + " ".join(line).rstrip())
+                padded = " " * col_widths[col]
+            line_parts.append(padded)
+        output_lines.append("    " + " ".join(line_parts).rstrip())
 
     result = "\n".join(output_lines)
     st.code(result, language="c")
 
-    with st.expander("🔧 デバッグログ", expanded=True):
-        st.write(f"抽出されたキー数: {len(keycodes)}")
-        st.write(f"抽出された座標数: {len(coords)}")
-        st.write(f"使用インデント単位 spacing_unit: {spacing_unit}")
+    # Debug log
+    with st.expander("🔧 Debug Log", expanded=True):
+        st.write(f"Extracted keycodes: {len(keycodes)}")
+        st.write(f"Extracted coordinates: {len(coords)}")
+        st.write(f"Indent unit: {spacing_unit}")
         for y in sorted(rows):
-            st.write(f"行 {y}: {len(rows[y])} キー")
+            st.write(f"Row {y}: {len(rows[y])} keys")
